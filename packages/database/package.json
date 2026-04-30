@@ -1,0 +1,21 @@
+{
+  "name": "plms-database",
+  "version": "0.1.0",
+  "scripts": {
+    "migrate": "prisma migrate dev",
+    "migrate:prod": "prisma migrate deploy",
+    "studio": "prisma studio",
+    "generate": "prisma generate",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

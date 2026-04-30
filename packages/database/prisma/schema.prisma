@@ -1,0 +1,271 @@
+// PLMS - Professional Life Management System
+// Prisma Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS ───────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      UserRole @default(PROFESSIONAL)
+  plan      PlanType @default(FREE)
+
+  // Profile
+  profession  String?   // avukat, doktor, mimar, danışman
+  phone       String?
+  address     String?
+  taxNumber   String?
+
+  // Relations
+  clients   Client[]
+  cases     Case[]
+  documents Document[]
+  reminders Reminder[]
+  invoices  Invoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  PROFESSIONAL
+  ASSISTANT
+}
+
+enum PlanType {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+// ─── CLIENTS ─────────────────────────────────────────────
+model Client {
+  id          String  @id @default(cuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id])
+
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  taxNumber   String?
+  notes       String?
+
+  cases     Case[]
+  invoices  Invoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("clients")
+}
+
+// ─── CASES ───────────────────────────────────────────────
+model Case {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  clientId    String?
+  client      Client?    @relation(fields: [clientId], references: [id])
+
+  title       String
+  description String?
+  type        CaseType   @default(GENERAL)
+  status      CaseStatus @default(OPEN)
+
+  // Legal specific
+  courtName   String?
+  caseNumber  String?
+  nextHearing DateTime?
+
+  // Relations
+  documents Document[]
+  entries   Entry[]
+  reminders Reminder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cases")
+}
+
+enum CaseType {
+  LEGAL
+  MEDICAL
+  ARCHITECTURE
+  CONSULTING
+  ACCOUNTING
+  GENERAL
+}
+
+enum CaseStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING
+  CLOSED
+  ARCHIVED
+}
+
+// ─── ENTRIES (Notes/Transcripts) ─────────────────────────
+model Entry {
+  id      String    @id @default(cuid())
+  caseId  String
+  case    Case      @relation(fields: [caseId], references: [id])
+
+  type    EntryType
+  content String    // Transcript, note, or summary
+  rawText String?   // Original before AI processing
+
+  // AI Analysis
+  aiSummary    String?
+  aiKeyPoints  Json?   // Array of key points
+  aiActionItems Json?  // Array of action items
+  aiRisks      Json?   // Identified risks
+
+  // Source
+  sourceType   SourceType @default(MANUAL)
+  audioFileUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("entries")
+}
+
+enum EntryType {
+  TRANSCRIPT
+  NOTE
+  SUMMARY
+  REPORT
+  EMAIL
+}
+
+enum SourceType {
+  MANUAL
+  AUDIO
+  EMAIL
+  WHATSAPP
+  OCR
+  PASTE
+}
+
+// ─── DOCUMENTS ───────────────────────────────────────────
+model Document {
+  id       String  @id @default(cuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id])
+  caseId   String?
+  case     Case?   @relation(fields: [caseId], references: [id])
+
+  name     String
+  fileUrl  String
+  fileType String   // pdf, docx, jpg, mp3, etc.
+  fileSize Int      // bytes
+
+  // OCR Result
+  ocrText    String?
+  ocrStatus  OcrStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("documents")
+}
+
+enum OcrStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+// ─── REMINDERS ───────────────────────────────────────────
+model Reminder {
+  id      String         @id @default(cuid())
+  userId  String
+  user    User           @relation(fields: [userId], references: [id])
+  caseId  String?
+  case    Case?          @relation(fields: [caseId], references: [id])
+
+  title   String
+  body    String?
+  dueAt   DateTime
+  type    ReminderType   @default(GENERAL)
+  status  ReminderStatus @default(PENDING)
+
+  // Notification channels
+  sendEmail   Boolean @default(true)
+  sendSms     Boolean @default(false)
+  sendPush    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reminders")
+}
+
+enum ReminderType {
+  HEARING       // Mahkeme duruşması
+  DEADLINE      // Yasal süre
+  PAYMENT       // Ödeme vadesi
+  FOLLOWUP      // Müşteri takibi
+  DOCUMENT      // Belge teslimi
+  GENERAL
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  ACKNOWLEDGED
+  DISMISSED
+}
+
+// ─── INVOICES ────────────────────────────────────────────
+model Invoice {
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+  clientId   String?
+  client     Client?       @relation(fields: [clientId], references: [id])
+
+  invoiceNo  String        @unique
+  title      String
+  amount     Decimal       @db.Decimal(10, 2)
+  currency   String        @default("TRY")
+  taxRate    Decimal       @db.Decimal(5, 2) @default(20)
+  taxAmount  Decimal       @db.Decimal(10, 2)
+  total      Decimal       @db.Decimal(10, 2)
+
+  status     InvoiceStatus @default(DRAFT)
+  dueAt      DateTime?
+  paidAt     DateTime?
+
+  items      Json          // Line items array
+  notes      String?
+
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
